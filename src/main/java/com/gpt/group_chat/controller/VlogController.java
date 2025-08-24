@@ -7,6 +7,7 @@ import com.gpt.group_chat.model.VlogStatus;
 import com.gpt.group_chat.repository.GroupRepository;
 import com.gpt.group_chat.repository.UserRepository;
 import com.gpt.group_chat.repository.VlogRepository;
+import com.gpt.group_chat.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,13 +22,15 @@ public class VlogController {
     private final VlogRepository vlogRepository;
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
     private final Random random = new Random();
 
     public VlogController(VlogRepository vlogRepository, GroupRepository groupRepository,
-                          UserRepository userRepository) {
+                          UserRepository userRepository, NotificationService notificationService) {
         this.vlogRepository = vlogRepository;
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     @PostMapping("/assign/{groupId}")
@@ -64,6 +67,8 @@ public class VlogController {
         vlog.setStatus(VlogStatus.ASSIGNED);
 
         Vlog savedVlog = vlogRepository.save(vlog);
+        // Send notification
+        notificationService.notifyVlogAssigned(savedVlog);
 
         return ResponseEntity.ok(savedVlog);
     }
@@ -81,6 +86,9 @@ public class VlogController {
         vlog.setSubmittedAt(LocalDateTime.now());
 
         Vlog savedVlog = vlogRepository.save(vlog);
+        // Send notification
+        notificationService.notifyVlogSubmitted(savedVlog);
+
         return ResponseEntity.ok(savedVlog);
     }
 

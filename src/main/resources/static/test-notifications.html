@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Message Notification Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<div>
+    <h2>Message Notification Test</h2>
+
+    <!-- Connection Controls -->
+    <div>
+        <h3>Connection</h3>
+        <label>User ID: <input type="number" id="userId" value="1"></label>
+        <label>Group ID: <input type="number" id="groupId" value="1"></label>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <span id="connectionStatus">Disconnected</span>
+    </div>
+
+    <!-- Send Message -->
+    <div>
+        <h3>Send Message</h3>
+        <input type="text" id="messageContent" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+
+    <!-- Messages Display -->
+    <div>
+        <h3>Group Messages</h3>
+        <div id="messages" style="height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px;">
+        </div>
+    </div>
+
+    <!-- Notifications Display -->
+    <div>
+        <h3>Real-time Notifications</h3>
+        <div id="notifications" style="height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; background-color: #f0f0f0;">
+        </div>
+    </div>
+
+    <!-- Check Notifications Button -->
+    <div>
+        <h3>Check User Notifications</h3>
+        <label>Check notifications for User ID: <input type="number" id="checkUserId" value="2"></label>
+        <button onclick="checkNotifications()">Get Notifications</button>
+        <div id="notificationsList" style="height: 150px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px;">
+        </div>
+    </div>
+</div>
+
+<script>
+    let stompClient = null;
+    let currentUserId = null;
+    let currentGroupId = null;
+
+    function connect() {
+        currentUserId = document.getElementById('userId').value;
+        currentGroupId = document.getElementById('groupId').value;
+
+        const socket = new SockJS('/chat');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            console.log('Connected: ' + frame);
+            document.getElementById('connectionStatus').innerText = 'Connected';
+
+            // Subscribe to group messages
+            stompClient.subscribe('/topic/messages/' + currentGroupId, function(message) {
+                const chatMessage = JSON.parse(message.body);
+                displayMessage(chatMessage);
+            });
+
+            // Subscribe to personal notifications
+            stompClient.subscribe('/topic/notifications/' + currentUserId, function(notification) {
+                const notificationData = JSON.parse(notification.body);
+                displayNotification(notificationData);
+            });
+        });
+    }
+
+    function disconnect() {
+        if (stompClient !== null) {
+            stompClient.disconnect();
+            document.getElementById('connectionStatus').innerText = 'Disconnected';
+        }
+    }
+
+    function sendMessage() {
+        const content = document.getElementById('messageContent').value;
+
+        if (content && stompClient) {
+            // Create message object matching your Message entity structure
+            const message = {
+                content: content,
+                sender: { id: parseInt(currentUserId) },
+                group: { id: parseInt(currentGroupId) }
+            };
+
+            stompClient.send('/app/sendMessage', {}, JSON.stringify(message));
+            document.getElementById('messageContent').value = '';
+        }
+    }
+
+    function displayMessage(message) {
+        const messagesDiv = document.getElementById('messages');
+        const messageElement = document.createElement('div');
+        messageElement.innerHTML = `
+                <strong>User ${message.sender.id}:</strong> ${message.content}
+                <small>(${new Date(message.timestamp).toLocaleTimeString()})</small>
+            `;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function displayNotification(notification) {
+        const notificationsDiv = document.getElementById('notifications');
+        const notificationElement = document.createElement('div');
+        notificationElement.innerHTML = `
+                <div style="background: #e8f5e8; margin: 2px; padding: 5px; border-radius: 3px;">
+                    <strong>${notification.title}</strong><br>
+                    ${notification.message}<br>
+                    <small>Type: ${notification.type} | ${new Date(notification.createdAt).toLocaleTimeString()}</small>
+                </div>
+            `;
+        notificationsDiv.appendChild(notificationElement);
+        notificationsDiv.scrollTop = notificationsDiv.scrollHeight;
+    }
+
+    async function checkNotifications() {
+        const userId = document.getElementById('checkUserId').value;
+
+        try {
+            const response = await fetch(`/notifications/user/${userId}`);
+            const notifications = await response.json();
+
+            const listDiv = document.getElementById('notificationsList');
+            listDiv.innerHTML = '<h4>Database Notifications:</h4>';
+
+            notifications.forEach(notif => {
+                const notifElement = document.createElement('div');
+                notifElement.innerHTML = `
+                        <div style="border: 1px solid #ddd; margin: 2px; padding: 5px;">
+                            <strong>${notif.title}</strong> (${notif.type})<br>
+                            ${notif.message}<br>
+                            <small>ID: ${notif.id} | Read: ${notif.read} | ${new Date(notif.createdAt).toLocaleString()}</small>
+                        </div>
+                    `;
+                listDiv.appendChild(notifElement);
+            });
+
+            if (notifications.length === 0) {
+                listDiv.innerHTML += '<p>No notifications found for this user.</p>';
+            }
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+            document.getElementById('notificationsList').innerHTML = 'Error fetching notifications';
+        }
+    }
+
+    // Send message on Enter key
+    document.getElementById('messageContent').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+</script>
+</body>
+</html>
